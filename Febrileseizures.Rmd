@@ -976,13 +976,13 @@ febrile_seizures_2022_s <- ms_s_2022 %>% select(ENROLID, AGE, SEX, DX1, SVCDATE)
 febrile_seizures <- bind_rows(febrile_seizures_2006_i, febrile_seizures_2006_o, febrile_seizures_2006_s, febrile_seizures_2007_i, febrile_seizures_2007_o, febrile_seizures_2007_s, febrile_seizures_2008_i, febrile_seizures_2008_o, febrile_seizures_2008_s, febrile_seizures_2009_i, febrile_seizures_2009_o, febrile_seizures_2009_s, febrile_seizures_2010_i, febrile_seizures_2010_o, febrile_seizures_2010_s, febrile_seizures_2011_i, febrile_seizures_2011_o, febrile_seizures_2011_s, febrile_seizures_2012_i, febrile_seizures_2012_o, febrile_seizures_2012_s, febrile_seizures_2013_i, febrile_seizures_2013_o, febrile_seizures_2013_s, febrile_seizures_2014_i, febrile_seizures_2014_o, febrile_seizures_2014_s, febrile_seizures_2015_i, febrile_seizures_2015_o, febrile_seizures_2015_s, febrile_seizures_2016_i, febrile_seizures_2016_o, febrile_seizures_2016_s, febrile_seizures_2017_i, febrile_seizures_2017_o, febrile_seizures_2017_s, febrile_seizures_2018_i, febrile_seizures_2018_o, febrile_seizures_2018_s, febrile_seizures_2019_i, febrile_seizures_2019_o, febrile_seizures_2019_s, febrile_seizures_2020_i, febrile_seizures_2020_o, febrile_seizures_2020_s, febrile_seizures_2021_i, febrile_seizures_2021_o, febrile_seizures_2021_s, febrile_seizures_2022_i, febrile_seizures_2022_o, febrile_seizures_2022_s) %>% 
   arrange(ENROLID, SVCDATE) %>% 
   distinct(ENROLID, SVCDATE, .keep_all=TRUE) %>% 
-  filter(AGE <= 5) %>% 
+  filter(AGE < 5) %>% 
   collect()
 
 
 
 
-# First febrile seizure (eliminate patients with first febrile seizure after 6 years of age)
+# First febrile seizure
 first_febrile_seizure <- febrile_seizures %>% 
   distinct(ENROLID, .keep_all=TRUE) %>%  
   collect()
@@ -1172,6 +1172,11 @@ febrile_seizure_enrollment <- bind_rows(febrile_seizure_enrollment_2006, febrile
   left_join(first_febrile_seizure, by="ENROLID") %>% 
   arrange(ENROLID, DTSTART) %>% 
   group_by(ENROLID) %>% 
+  mutate(patients_younger_than_6_months = case_when(
+    ((AGE==0) & (as.numeric(dplyr::first(SVCDATE) - dplyr::first(DTSTART)) > 0) & (as.numeric(dplyr::first(SVCDATE) - dplyr::first(DTSTART)) < 180)) ~ "yes",
+    TRUE ~ "no"
+  )) %>%   
+  filter(patients_younger_than_6_months=="no") %>% 
   filter(DTSTART >= (SVCDATE - days(31))) %>% 
   mutate(coverage_gap = as.numeric(DTSTART - lag(DTEND))) %>% 
   mutate(long_coverage_gap = case_when(
@@ -4266,6 +4271,7 @@ initial_rescue_BZD_without_rescue_BZD <- febrile_seizure_data %>%
   reframe(
   initial_rescue_BZD = table(type_rescue_medication_1)
 )
+initial_rescue_BZD_without_rescue_BZD
 
 
 
@@ -4485,6 +4491,7 @@ rescue_after_epilepsy_without_rescue_BZD <- febrile_seizure_data %>%
   reframe(
   rescue_after_epilepsy = table(rescue_after_epilepsy_yes_no)
 )
+rescue_after_epilepsy_without_rescue_BZD
 
 
 
@@ -4704,6 +4711,43 @@ first_rescue_no_new_seizures_no_new_encounters_no_new_epilepsy <- febrile_seizur
   reframe(
   no_new_seizures_no_new_encounters_no_new_epilepsy = CrossTable(no_new_seizures_no_new_encounters_no_new_epilepsy)
 )
+
+
+
+
+# Long delay to rescue medication prescription
+long_time_to_rescue_data <- febrile_seizure_data %>% 
+  mutate(time_to_rescue_medication = as.numeric(date_rescue_medication_1 - date_febrile_seizure_1)) %>% 
+  mutate(long_time_to_rescue = case_when(
+    time_to_rescue_medication > 30 ~ "yes",
+    TRUE ~ "no"
+    )) %>% 
+  filter(long_time_to_rescue=="yes") %>% 
+  mutate(no_new_febrile_seizure = case_when(
+    (is.na(date_febrile_seizure_2) | (date_febrile_seizure_2 > date_rescue_medication_1)) ~ "yes",
+    TRUE ~ "no"
+  )) %>% 
+  mutate(no_new_emergency = case_when(
+    (is.na(febrile_seizure_emergency_encounter_1) |  (febrile_seizure_emergency_encounter_1 > date_rescue_medication_1)) ~ "yes",
+    TRUE ~ "no"
+  )) %>% 
+  mutate(no_new_hospitalization = case_when(
+    (is.na(febrile_seizure_inpatient_encounter_1) |  (febrile_seizure_inpatient_encounter_1 > date_rescue_medication_1)) ~ "yes",
+    TRUE ~ "no"
+  )) %>% 
+  mutate(no_epilepsy = case_when(
+    (is.na(first_code_epilepsy) |  (first_code_epilepsy > date_rescue_medication_1)) ~ "yes",
+    TRUE ~ "no"
+  )) %>% 
+  collect()
+
+CrossTable(long_time_to_rescue_data$no_new_febrile_seizure)
+
+CrossTable(long_time_to_rescue_data$no_new_emergency)
+
+CrossTable(long_time_to_rescue_data$no_new_hospitalization)
+
+CrossTable(long_time_to_rescue_data$no_epilepsy)
 ```
 
 
